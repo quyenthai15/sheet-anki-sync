@@ -1,6 +1,6 @@
-# 🎴 AnkiSync: Portable Study Workflow
+# 🎴 AnkiSync: Portable Study Workflow (CSV Edition)
 
-A customizable system to sync Google Sheets with Anki using Node.js, AnkiConnect, and Google Apps Script. 
+A simple, fast, and OAuth-free system to sync Google Sheets data with Anki.
 
 ## 🚀 First-Time Setup (On a New Mac)
 
@@ -9,79 +9,45 @@ A customizable system to sync Google Sheets with Anki using Node.js, AnkiConnect
 - **Anki**: [Download and install](https://apps.ankiweb.net/)
 - **AnkiConnect Add-on**: In Anki, go to `Tools -> Add-ons -> Get Add-ons` and enter code: `2055492159`. Restart Anki.
 
-### 2. Clone and Initialize
+### 2. Prepare Google Sheet
+1. In your Google Sheet, go to `File -> Share -> Publish to the web`.
+2. Select `Entire Document` (or your specific sheet) and change the format to **Comma-separated values (.csv)**.
+3. Click **Publish** and copy the generated URL.
+
+### 3. Initialize Project
 ```bash
 git clone <your-repo-url>
 cd anki-sync
-chmod +x setup.sh
 ./setup.sh
 ```
-*Note: This will install dependencies and create your `.env` file.*
 
-### 3. Google Cloud Configuration
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a new project.
-3. Enable **Google Sheets API**.
-4. Go to **APIs & Services -> Credentials**.
-5. Click **Create Credentials -> OAuth 2.0 Client ID** (Type: *Desktop App*).
-6. Download the JSON, rename it to `credentials.json`, and move it to the `anki-sync/` folder.
+### 4. Configure
+1. Open `config.json` and paste your **Published CSV URL** into `"sheet_csv_url"`.
+2. Update the `"mapping"` section to match your Google Sheet headers.
 
-### 4. Environment Variables
-Open the `.env` file and fill in your details:
-```bash
-GEMINI_API_KEY=your_key_here
-SHEET_ID=your_spreadsheet_id_here
-```
 ### 5. Restore Templates & Add-ons
-- **Templates:** In `anki-sync/templates/`, double-click any `.apkg` files. This imports your Note Types (card styles) into Anki.
-- **Add-ons:** Check `anki-sync/backups/addons_list.txt`. Copy the numeric IDs and install them in Anki (`Tools -> Add-ons -> Get Add-ons`).
-- **Configuration:** If you have custom config for an add-on (like AnkiConnect), update it in `Tools -> Add-ons -> Config`.
+- **Templates:** In `anki-sync/templates/`, double-click any `.apkg` files to import your Note Types.
+- **Add-ons:** Check `anki-sync/backups/addons_list.txt` and install by ID in Anki.
 
 ---
 
 ## 🛠 Usage
 
-### Backup Your Setup
-Before moving to a new Mac, run:
-```bash
-npm run list-addons
-```
-This saves a list of your installed add-ons to `backups/addons_list.txt`. Export your card templates (as `.apkg`) and save them in the `templates/` folder.
-
 ### Syncing Data to Anki
-1. Ensure Anki is open.
-...
-
-2. Run the sync script:
+Simply run:
 ```bash
-node sync.js
+npm run sync
 ```
-*The first time you run this, it will open your browser to authorize access to your Google Sheet.*
+This script will fetch your CSV, compare it with your current Anki deck, and **only add new cards** (bulk sync).
 
-### Backing up Apps Script (CLASP)
-To pull your latest `J-Study Tools` script code from Google into this folder:
+### Backing up Apps Script
+If you want to keep a local copy of your Google Apps Script:
 ```bash
 npx clasp login
 npx clasp clone <YOUR_SCRIPT_ID> --dir apps-script
 ```
-To push local changes back to Google:
-```bash
-npx clasp push
-```
-
-## ⚙️ Custom Mapping
-You can change how spreadsheet columns map to Anki fields by editing `config.json`.
-- **Key**: The exact header name in your Google Sheet.
-- **Value**: The exact field name in your Anki Note Type.
-
-```json
-"mapping": {
-  "Expression": "Word",
-  "Reading": "Reading"
-}
-```
 
 ---
 
-## 🔒 Security Note
-Your `credentials.json`, `token.json`, and `.env` are automatically ignored by Git (via `.gitignore`) to keep your secrets safe. **Never commit these files.**
+## 🧹 Cleanup
+If you previously set up a Google Cloud Project or OAuth credentials, follow the instructions in **[CLEANUP.md](./CLEANUP.md)** to remove them.

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Starting Anki Sync Setup..."
+echo "Starting Anki Sync Setup (CSV Edition)..."
 
 # 1. Check for Node.js
 if ! command -v node &> /dev/null; then
@@ -19,17 +19,13 @@ if ! npx clasp login --status &> /dev/null; then
     npx clasp login
 fi
 
-# 4. Instructions
+# 4. Final Instructions
 echo "----------------------------------------------------"
 echo "SETUP INSTRUCTIONS:"
-echo "1. Anki Add-on: Install AnkiConnect (ID: 2055492159)."
-echo "2. Google Cloud: Go to https://console.cloud.google.com/"
-echo "   - Create a project."
-echo "   - Enable Google Sheets API."
-echo "   - Create OAuth 2.0 Client ID (Desktop app)."
-echo "   - Download JSON and save it as 'credentials.json' in this folder."
-echo "3. Update 'config.json' with your Sheet ID and Deck name."
-echo "4. Run 'node sync.js' to start syncing."
+echo "1. Google Sheet: Publish your sheet to the web as CSV."
+echo "2. Config: Paste the CSV URL into 'config.json'."
+echo "3. Anki: Ensure Anki is open with AnkiConnect installed."
+echo "4. Sync: Run 'npm run sync'."
 echo "----------------------------------------------------"
 echo "APPS SCRIPT BACKUP:"
 echo "If you want to back up your J-Study Tools script, run:"

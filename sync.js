@@ -1,23 +1,14 @@
 const fs = require('fs');
-const path = require('path');
-const { google } = require('googleapis');
+const path = require("path");
 const axios = require('axios');
 const http = require('http');
-const url = require('url');
+const { parse } = require("csv-parse/sync");
 
-/**
- * Helper to open URLs in the browser.
- */
-async function openUrl(url) {
-  const open = (await import('open')).default;
-  await open(url);
-}
-
-const TOKEN_PATH = path.join(__dirname, 'token.json');
-const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+const ANKI_URL = "http://127.0.0.1:8765";
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+// Use a dedicated agent to prevent socket hang-ups/reuse issues
+const agent = new http.Agent({ keepAlive: false });
 
 /**
  * Loads the configuration.
@@ -31,140 +22,130 @@ function loadConfig() {
 }
 
 /**
- * Authenticates with Google Sheets API.
+ * AnkiConnect Helper
  */
-async function authorize() {
-  if (!fs.existsSync(CREDENTIALS_PATH)) {
-    console.error('credentials.json not found! Please download it from Google Cloud Console.');
-    process.exit(1);
+async function ankiAction(action, params = {}) {
+  try {
+    const res = await axios.post(
+      ANKI_URL,
+      { action, version: 6, params },
+      { 
+        timeout: 30000,
+        httpAgent: agent 
+      },
+    );
+    if (res.data.error) throw new Error(res.data.error);
+    return res.data.result;
+  } catch (e) {
+    if (e.code === "ECONNREFUSED") {
+      throw new Error("Anki is not running or AnkiConnect is not installed.");
+    }
+    if (e.code === "ECONNRESET" || e.message.includes("hang up")) {
+      throw new Error(
+        'Anki connection dropped. This usually happens if Anki is "locked" by another window (Add, Browse, Preferences). Please close them and try again.',
+      );
+    }
+    throw e;
   }
-
-  const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH));
-  const { client_secret, client_id, redirect_uris } = credentials.installed || credentials.web;
-  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
-
-  if (fs.existsSync(TOKEN_PATH)) {
-    const token = fs.readFileSync(TOKEN_PATH);
-    oAuth2Client.setCredentials(JSON.parse(token));
-    return oAuth2Client;
-  }
-
-  return getNewToken(oAuth2Client);
 }
 
 /**
- * Gets a new token from the browser.
+ * Get all existing values for the primary field in the target deck.
+ * Uses chunking to prevent "socket hang up" on large decks.
  */
-function getNewToken(oAuth2Client) {
-  return new Promise((resolve, reject) => {
-    const authUrl = oAuth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: SCOPES,
-    });
+async function getExistingWords(deck, model, fieldName) {
+  console.log(`Checking Anki deck "${deck}" for existing cards...`);
+  const noteIds = await ankiAction("findNotes", { query: `deck:"${deck}"` });
+  if (noteIds.length === 0) return new Set();
 
-    console.log('Authorize this app by visiting this url:', authUrl);
-    openUrl(authUrl);
-
-    const server = http.createServer(async (req, res) => {
-      try {
-        console.log(`Received request: ${req.url}`);
-        if (req.url.indexOf('code=') > -1) {
-          const qs = new url.URL(req.url, 'http://127.0.0.1:3000').searchParams;
-          const code = qs.get('code');
-          res.end('Authentication successful! You can now close this tab and return to the console.');
-
-          const { tokens } = await oAuth2Client.getToken(code);
-          oAuth2Client.setCredentials(tokens);
-          fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
-          console.log('Token stored to', TOKEN_PATH);
-
-          server.close();
-          resolve(oAuth2Client);
-        } else {
-          res.end('Waiting for code...');
-        }
-      } catch (e) {
-        console.error('Error during redirect:', e);
-        res.statusCode = 500;
-        res.end('Authentication failed!');
-        reject(e);
+  const existing = new Set();
+  const chunkSize = 500; // Process 500 notes at a time
+  
+  for (let i = 0; i < noteIds.length; i += chunkSize) {
+    const chunk = noteIds.slice(i, i + chunkSize);
+    const notesInfo = await ankiAction("notesInfo", { notes: chunk });
+    notesInfo.forEach((info) => {
+      if (info.modelName === model && info.fields[fieldName]) {
+        existing.add(info.fields[fieldName].value.trim());
       }
-    }).listen(3000, '127.0.0.1', () => {
-      console.log('Temporary server listening on http://127.0.0.1:3000');
     });
-
-
-    // Handle server shutdown
-    server.destroy = function () {
-      server.close();
-    };
-  });
+  }
+  
+  return existing;
 }
 
 /**
- * Syncs data from Google Sheets to Anki.
+ * Main Sync Function
  */
 async function sync() {
   const config = loadConfig();
-  const auth = await authorize();
-  const sheets = google.sheets({ version: 'v4', auth });
-
-  console.log(`Fetching data from sheet: ${config.sheet_id}...`);
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: config.sheet_id,
-    range: `${config.sheet_name}!A:Z`,
-  });
-
-  const rows = response.data.values;
-  if (!rows || rows.length === 0) {
-    console.log('No data found.');
+  if (
+    !config.sheet_csv_url ||
+    config.sheet_csv_url.includes("YOUR_PUBLISHED_CSV_URL_HERE")
+  ) {
+    console.error(
+      "Error: Please provide a valid sheet_csv_url in config.json.",
+    );
     return;
   }
 
-  const headers = rows[0];
-  const data = rows.slice(1);
+  // 1. Fetch CSV
+  console.log("Fetching CSV data from Google Sheets...");
+  const res = await axios.get(config.sheet_csv_url);
+  const records = parse(res.data, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+  });
 
-  console.log(`Found ${data.length} rows. Syncing to Anki...`);
-
-  for (const row of data) {
-    const note = {
-      deckName: config.anki_deck,
-      modelName: config.anki_model,
-      fields: {},
-      options: { allowDuplicate: false },
-      tags: ["sheet-sync"]
-    };
-
-    // Apply custom mapping
-    for (const [sheetCol, ankiField] of Object.entries(config.mapping)) {
-      const colIndex = headers.indexOf(sheetCol);
-      if (colIndex > -1) {
-        note.fields[ankiField] = row[colIndex] || "";
-      }
-    }
-
-    if (!note.fields[config.mapping[headers[0]]]) continue; // Skip if main field is empty
-
-    try {
-      await axios.post('http://127.0.0.1:8765', {
-        action: 'addNote',
-        version: 6,
-        params: { note }
-      }, { timeout: 5000 });
-      console.log(`Synced: ${row[0]}`);
-      // Small pause to let Anki breathe
-      await new Promise(resolve => setTimeout(resolve, 100));
-    } catch (e) {
-      if (e.response && e.response.data.error === 'cannot create note because it is a duplicate') {
-        // Optional: Update existing note instead of just skipping
-        // console.log(`Skipping duplicate: ${row[0]}`);
-      } else {
-        console.error(`Error syncing ${row[0]}:`, e.message);
-      }
-    }
+  if (records.length === 0) {
+    console.log("No data found in CSV.");
+    return;
   }
 
-  console.log('Sync complete!');
+  // 2. Identify Primary Key (First field in mapping)
+  const firstSheetCol = Object.keys(config.mapping)[0];
+  const firstAnkiField = config.mapping[firstSheetCol];
+
+  // 3. Diff with Anki
+  const existingWords = await getExistingWords(
+    config.anki_deck,
+    config.anki_model,
+    firstAnkiField,
+  );
+
+  // 4. Prepare notes
+  const notesToAdd = [];
+  for (const row of records) {
+    const word = (row[firstSheetCol] || "").trim();
+    if (!word || existingWords.has(word)) continue;
+
+    const fields = {};
+    for (const [sheetCol, ankiField] of Object.entries(config.mapping)) {
+      fields[ankiField] = row[sheetCol] || "";
+    }
+
+    notesToAdd.push({
+      deckName: config.anki_deck,
+      modelName: config.anki_model,
+      fields: fields,
+      options: { allowDuplicate: false },
+      tags: ["csv-sync"],
+    });
+  }
+
+  if (notesToAdd.length === 0) {
+    console.log("Everything is already in Anki. Nothing to sync!");
+    return;
+  }
+
+  // 5. Bulk Add
+  console.log(`Adding ${notesToAdd.length} new notes to Anki...`);
+  const results = await ankiAction("addNotes", { notes: notesToAdd });
+  const successCount = results.filter((id) => id !== null).length;
+  console.log(`Successfully synced ${successCount} notes!`);
 }
 
-sync().catch(console.error);
+sync().catch((err) => {
+  console.error("Sync failed:", err.message);
+});

@@ -4,7 +4,14 @@ const { google } = require('googleapis');
 const axios = require('axios');
 const http = require('http');
 const url = require('url');
-const open = require('open');
+
+/**
+ * Helper to open URLs in the browser.
+ */
+async function openUrl(url) {
+  const open = (await import('open')).default;
+  await open(url);
+}
 
 const TOKEN_PATH = path.join(__dirname, 'token.json');
 const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
@@ -56,26 +63,36 @@ function getNewToken(oAuth2Client) {
     });
 
     console.log('Authorize this app by visiting this url:', authUrl);
-    open(authUrl);
+    openUrl(authUrl);
 
     const server = http.createServer(async (req, res) => {
       try {
-        if (req.url.indexOf('/oauth2callback') > -1) {
-          const qs = new url.URL(req.url, 'http://localhost:3000').searchParams;
+        console.log(`Received request: ${req.url}`);
+        if (req.url.indexOf('code=') > -1) {
+          const qs = new url.URL(req.url, 'http://127.0.0.1:3000').searchParams;
           const code = qs.get('code');
-          res.end('Authentication successful! Please return to the console.');
-          server.destroy();
+          res.end('Authentication successful! You can now close this tab and return to the console.');
+
           const { tokens } = await oAuth2Client.getToken(code);
           oAuth2Client.setCredentials(tokens);
           fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+          console.log('Token stored to', TOKEN_PATH);
+
+          server.close();
           resolve(oAuth2Client);
+        } else {
+          res.end('Waiting for code...');
         }
       } catch (e) {
+        console.error('Error during redirect:', e);
+        res.statusCode = 500;
+        res.end('Authentication failed!');
         reject(e);
       }
-    }).listen(3000, () => {
-      // open(authUrl); // Already opened above
+    }).listen(3000, '127.0.0.1', () => {
+      console.log('Temporary server listening on http://127.0.0.1:3000');
     });
+
 
     // Handle server shutdown
     server.destroy = function () {
@@ -129,12 +146,14 @@ async function sync() {
     if (!note.fields[config.mapping[headers[0]]]) continue; // Skip if main field is empty
 
     try {
-      await axios.post('http://localhost:8765', {
+      await axios.post('http://127.0.0.1:8765', {
         action: 'addNote',
         version: 6,
         params: { note }
-      });
+      }, { timeout: 5000 });
       console.log(`Synced: ${row[0]}`);
+      // Small pause to let Anki breathe
+      await new Promise(resolve => setTimeout(resolve, 100));
     } catch (e) {
       if (e.response && e.response.data.error === 'cannot create note because it is a duplicate') {
         // Optional: Update existing note instead of just skipping

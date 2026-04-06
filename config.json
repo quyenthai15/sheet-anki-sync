@@ -1,16 +1,15 @@
 {
-  "sheet_id": "YOUR_GOOGLE_SHEET_ID_HERE",
-  "sheet_name": "Sheet1",
-  "anki_deck": "Japanese::Vocab",
-  "anki_model": "Japanese-Recognition",
+  "sheet_id": "1g84tTdzC4Z35qCgAl9pBN2qQ0bQoDogOX5CcwTtwpt0",
+  "sheet_name": "N5",
+  "anki_deck": "Japanese::N5",
+  "anki_model": "JP_sheet",
   "mapping": {
-    "Expression": "Word",
+    "Expression": "Expression",
     "Reading": "Reading",
     "Meaning": "Meaning",
     "Kanji": "Kanji",
     "Type": "Type",
-    "Sentence JP": "Sentence JP",
-    "Sentence VN": "Sentence VN",
-    "Level": "Level"
+    "Sentence JP": "Sentence_JP",
+    "Sentence VN": "Sentence_VN"
   }
 }

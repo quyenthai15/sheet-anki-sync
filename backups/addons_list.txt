@@ -1,0 +1,6 @@
+ANKI ADD-ONS LIST
+=================
+
+- Modern Material Theme  - Updated 062025 (ID: 1321246682)
+- Review Heatmap (ID: 1771074083)
+- AnkiConnect (ID: 2055492159)

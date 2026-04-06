@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "sync": "node sync.js",
+    "pull": "clasp pull",
+    "push": "clasp push",
+    "list-addons": "node list-addons.js",
+    "setup": "./setup.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

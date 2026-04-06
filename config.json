@@ -10,7 +10,7 @@
     "Meaning (VN)": "Meaning",
     "Kanji": "Kanji",
     "Type": "Type",
-    "Sentence JP": "Sentence_JP",
-    "Sentence VN": "Sentence_VN"
+    "JP sentence": "Sentence_JP",
+    "VN sentence": "Sentence_VN"
   }
 }

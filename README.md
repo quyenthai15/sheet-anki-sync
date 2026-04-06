@@ -34,16 +34,32 @@ cd anki-sync
 ## 🛠 Usage
 
 ### Syncing Data to Anki
-- **Standard Sync:** (Only adds new cards)
+- **Dry Run:** (See what *would* happen without making changes)
+  ```bash
+  npm run sync:dry
+  ```
+- **Standard Sync:** (Adds new cards, with full validation)
   ```bash
   npm run sync
   ```
-- **Force Sync:** (Updates existing cards + adds new ones)
+- **Force Sync:** (Updates changed cards + adds new ones)
   ```bash
   npm run sync:force
   ```
+- **Force Dry Run:**
+  ```bash
+  npm run sync:force-dry
+  ```
 
-### Automatic TTS Audio
+### 🛡️ Safety Features
+1. **Pre-flight Validation:** The script automatically checks:
+   - Does your Google Sheet have all the column names listed in `config.json`?
+   - Does the Anki Deck and Note Type exist?
+   - Do all mapped Anki fields exist on your Note Type?
+2. **Smart Diffing:** When running a "Force Sync," the script only updates cards if the spreadsheet data is actually different from what's already in Anki.
+3. **Bulk Actions:** Uses AnkiConnect's bulk APIs to ensure fast and reliable updates even for thousands of cards.
+
+### 🎙️ Automatic TTS Audio
 If you specify an `"audio_field"` in `config.json` (e.g., `"Audio"`), the script will automatically:
 1. Generate Japanese audio for your primary word using Google Translate.
 2. Download and attach the `.mp3` file to your Anki card.

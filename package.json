@@ -4,7 +4,9 @@
   "main": "index.js",
   "scripts": {
     "sync": "node sync.js",
+    "sync:dry": "node sync.js --dry-run",
     "sync:force": "node sync.js --force",
+    "sync:force-dry": "node sync.js --force --dry-run",
     "pull": "clasp pull",
     "push": "clasp push",
     "list-addons": "node list-addons.js",

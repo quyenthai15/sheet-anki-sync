@@ -15,7 +15,7 @@ npm install
 # 3. Clasp Login (for Apps Script backup)
 echo "Checking Clasp login..."
 if ! npx clasp login --status &> /dev/null; then
-    echo "Please login to Clasp to back up your Apps Script."
+    echo "Please login to Clasp to back up your Apps Script. Skip if not needed."
     npx clasp login
 fi
 

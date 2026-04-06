@@ -1,5 +1,7 @@
 {
   "sheet_csv_url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQD_gMDVSBpp_4TyghCwr0hh6b20FXPgh7xHsH2BjIGWi2b9gtHsG8gfJyXkL_vKu-thO0h4lLx8DS4/pub?gid=0&single=true&output=csv",
+  "force_sync": false,
+  "audio_field": "Audio",
   "anki_deck": "Japanese::N5",
   "anki_model": "JP_sheet",
   "mapping": {

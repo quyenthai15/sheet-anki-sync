@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "sync": "node sync.js",
+    "sync:force": "node sync.js --force",
     "pull": "clasp pull",
     "push": "clasp push",
     "list-addons": "node list-addons.js",

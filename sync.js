@@ -18,7 +18,15 @@ function loadConfig() {
     console.error('config.json not found!');
     process.exit(1);
   }
-  return JSON.parse(fs.readFileSync(CONFIG_PATH));
+  const config = JSON.parse(fs.readFileSync(CONFIG_PATH));
+  
+  // Check for CLI flags
+  if (process.argv.includes('--force') || process.argv.includes('--forceUpdate')) {
+    config.force_sync = true;
+    console.log('--- Force Sync Enabled via CLI ---');
+  }
+  
+  return config;
 }
 
 /**
@@ -30,7 +38,7 @@ async function ankiAction(action, params = {}) {
       ANKI_URL,
       { action, version: 6, params },
       { 
-        timeout: 30000,
+        timeout: 60000,
         httpAgent: agent 
       },
     );
@@ -50,28 +58,35 @@ async function ankiAction(action, params = {}) {
 }
 
 /**
- * Get all existing values for the primary field in the target deck.
- * Uses chunking to prevent "socket hang up" on large decks.
+ * Get all existing notes and their IDs.
+ * Returns a Map of word -> noteId.
  */
-async function getExistingWords(deck, model, fieldName) {
+async function getExistingNotesMap(deck, model, fieldName) {
   console.log(`Checking Anki deck "${deck}" for existing cards...`);
   const noteIds = await ankiAction("findNotes", { query: `deck:"${deck}"` });
-  if (noteIds.length === 0) return new Set();
+  if (noteIds.length === 0) return new Map();
 
-  const existing = new Set();
-  const chunkSize = 500; // Process 500 notes at a time
+  const notesMap = new Map();
+  const chunkSize = 500;
   
   for (let i = 0; i < noteIds.length; i += chunkSize) {
     const chunk = noteIds.slice(i, i + chunkSize);
     const notesInfo = await ankiAction("notesInfo", { notes: chunk });
     notesInfo.forEach((info) => {
       if (info.modelName === model && info.fields[fieldName]) {
-        existing.add(info.fields[fieldName].value.trim());
+        notesMap.set(info.fields[fieldName].value.trim(), info.noteId);
       }
     });
   }
   
-  return existing;
+  return notesMap;
+}
+
+/**
+ * Generates a Google Translate TTS URL for Japanese.
+ */
+function getTtsUrl(text) {
+  return `https://translate.google.com/translate_tts?ie=UTF-8&tl=ja&client=tw-ob&q=${encodeURIComponent(text)}`;
 }
 
 /**
@@ -83,9 +98,7 @@ async function sync() {
     !config.sheet_csv_url ||
     config.sheet_csv_url.includes("YOUR_PUBLISHED_CSV_URL_HERE")
   ) {
-    console.error(
-      "Error: Please provide a valid sheet_csv_url in config.json.",
-    );
+    console.error("Error: Please provide a valid sheet_csv_url in config.json.");
     return;
   }
 
@@ -107,43 +120,86 @@ async function sync() {
   const firstSheetCol = Object.keys(config.mapping)[0];
   const firstAnkiField = config.mapping[firstSheetCol];
 
-  // 3. Diff with Anki
-  const existingWords = await getExistingWords(
+  // 3. Get existing notes map
+  const existingNotesMap = await getExistingNotesMap(
     config.anki_deck,
     config.anki_model,
     firstAnkiField,
   );
 
-  // 4. Prepare notes
+  // 4. Prepare updates and additions
   const notesToAdd = [];
+  const notesToUpdate = [];
+
   for (const row of records) {
     const word = (row[firstSheetCol] || "").trim();
-    if (!word || existingWords.has(word)) continue;
+    if (!word) continue;
 
     const fields = {};
     for (const [sheetCol, ankiField] of Object.entries(config.mapping)) {
       fields[ankiField] = row[sheetCol] || "";
     }
 
+    // Audio Logic
+    const audio = [];
+    if (config.audio_field) {
+      audio.push({
+        url: getTtsUrl(word),
+        filename: `ja_tts_${word.replace(/[^\w\s]/gi, '_')}.mp3`,
+        fields: [config.audio_field]
+      });
+    }
+
+    if (existingNotesMap.has(word)) {
+      if (config.force_sync) {
+        notesToUpdate.push({
+          id: existingNotesMap.get(word),
+          fields: fields,
+          audio: audio.length > 0 ? audio : undefined
+        });
+      }
+      continue;
+    }
+
     notesToAdd.push({
       deckName: config.anki_deck,
       modelName: config.anki_model,
       fields: fields,
+      audio: audio.length > 0 ? audio : undefined,
       options: { allowDuplicate: false },
       tags: ["csv-sync"],
     });
   }
 
-  if (notesToAdd.length === 0) {
-    console.log("Everything is already in Anki. Nothing to sync!");
-    return;
+  // 5. Bulk Update Existing Notes
+  if (notesToUpdate.length > 0) {
+    console.log(`Updating ${notesToUpdate.length} existing notes...`);
+    const actions = notesToUpdate.map(note => ({
+      action: "updateNoteFields",
+      params: { note }
+    }));
+    
+    // Chunk multi actions
+    const multiChunkSize = 100;
+    for (let i = 0; i < actions.length; i += multiChunkSize) {
+      await ankiAction("multi", { actions: actions.slice(i, i + multiChunkSize) });
+    }
+    console.log(`Update complete.`);
   }
 
-  // 5. Bulk Add
-  console.log(`Adding ${notesToAdd.length} new notes to Anki...`);
-  const results = await ankiAction("addNotes", { notes: notesToAdd });
-  const successCount = results.filter((id) => id !== null).length;
-  console.log(`Successfully synced ${successCount} notes!`);
+  // 6. Bulk Add New Notes
+  if (notesToAdd.length > 0) {
+    console.log(`Adding ${notesToAdd.length} new notes...`);
+    const results = await ankiAction("addNotes", { notes: notesToAdd });
+    const successCount = results.filter((id) => id !== null).length;
+    console.log(`Added ${successCount} notes.`);
+  }
+
+  if (notesToAdd.length === 0 && notesToUpdate.length === 0) {
+    console.log('No changes detected. Everything is already in Anki!');
+  } else {
+    console.log('Sync complete!');
+  }
 }
 
 sync().catch((err) => {

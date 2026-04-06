@@ -34,11 +34,20 @@ cd anki-sync
 ## 🛠 Usage
 
 ### Syncing Data to Anki
-Simply run:
-```bash
-npm run sync
-```
-This script will fetch your CSV, compare it with your current Anki deck, and **only add new cards** (bulk sync).
+- **Standard Sync:** (Only adds new cards)
+  ```bash
+  npm run sync
+  ```
+- **Force Sync:** (Updates existing cards + adds new ones)
+  ```bash
+  npm run sync:force
+  ```
+
+### Automatic TTS Audio
+If you specify an `"audio_field"` in `config.json` (e.g., `"Audio"`), the script will automatically:
+1. Generate Japanese audio for your primary word using Google Translate.
+2. Download and attach the `.mp3` file to your Anki card.
+3. No audio is needed in your Google Sheet—it's handled entirely by the sync script!
 
 ### Backing up Apps Script
 If you want to keep a local copy of your Google Apps Script:
@@ -46,8 +55,3 @@ If you want to keep a local copy of your Google Apps Script:
 npx clasp login
 npx clasp clone <YOUR_SCRIPT_ID> --dir apps-script
 ```
-
----
-
-## 🧹 Cleanup
-If you previously set up a Google Cloud Project or OAuth credentials, follow the instructions in **[CLEANUP.md](./CLEANUP.md)** to remove them.

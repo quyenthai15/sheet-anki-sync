@@ -6,7 +6,7 @@
  */
 const GEMINI_API_KEY =
   PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
-const MODEL_NAME = "gemini-2.0-flash-lite"; // Updated to current stable version
+const MODEL_NAME = "gemini-2.5-flash-lite";
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
@@ -77,6 +77,13 @@ Example:
         options,
       );
       const jsonResponse = JSON.parse(response.getContentText());
+      if (!jsonResponse.candidates || !jsonResponse.candidates[0]) {
+        const apiError = jsonResponse.error
+          ? `${jsonResponse.error.code}: ${jsonResponse.error.message}`
+          : JSON.stringify(jsonResponse);
+        SpreadsheetApp.getUi().alert(`API error on row ${currentRow}:\n${apiError}\n\nScript stopped.`);
+        return;
+      }
       const result = JSON.parse(
         jsonResponse.candidates[0].content.parts[0].text,
       );
@@ -92,7 +99,8 @@ Example:
       // Small pause to avoid hitting rate limits on free API keys
       Utilities.sleep(500);
     } catch (e) {
-      console.log(`Error on row ${currentRow}: ${e}`);
+      SpreadsheetApp.getUi().alert(`Unexpected error on row ${currentRow}:\n${e}\n\nScript stopped.`);
+      return;
     }
   }
 }

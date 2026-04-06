@@ -1,0 +1,16 @@
+{
+  "sheet_id": "YOUR_GOOGLE_SHEET_ID_HERE",
+  "sheet_name": "Sheet1",
+  "anki_deck": "Japanese::Vocab",
+  "anki_model": "Japanese-Recognition",
+  "mapping": {
+    "Expression": "Word",
+    "Reading": "Reading",
+    "Meaning": "Meaning",
+    "Kanji": "Kanji",
+    "Type": "Type",
+    "Sentence JP": "Sentence JP",
+    "Sentence VN": "Sentence VN",
+    "Level": "Level"
+  }
+}

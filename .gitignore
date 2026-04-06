@@ -1,0 +1,7 @@
+node_modules/
+token.json
+credentials.json
+.clasp.json
+.clasprc.json
+.DS_Store
+.env

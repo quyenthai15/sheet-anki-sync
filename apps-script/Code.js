@@ -4,13 +4,13 @@
  */
 const CONFIG = {
   SOURCE_EXPRESSION_COL: 1, // Column A: The word you want to look up
-  SOURCE_MEANING_COL: 3, // Column C: Optional meaning/context
+  SOURCE_MEANING_COL: 2, // Column C: Optional meaning/context
   MASTER_SHEET_NAME: "master_list",
   CHUNK_SIZE: 5, // Number of words to process in one API call
 
   // Mapping of result keys to column numbers (where the AI writes back)
   RESULTS_MAPPING: {
-    reading: 2, // Column B
+    reading: 3, // Column B
     kanji: 4, // Column D
     type: 5, // Column E
     sentence_jp: 6, // Column F

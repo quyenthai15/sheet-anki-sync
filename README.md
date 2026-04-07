@@ -56,7 +56,14 @@ The **Setup Wizard** will ask for:
 1. **Pre-flight Validation:** Automatically checks if your CSV headers and Anki fields match before doing anything.
 2. **Smart Diffing:** Updates existing cards ONLY if the spreadsheet data has actually changed.
 3. **Bulk Actions:** Uses AnkiConnect's bulk APIs for high-performance syncing.
-4. **Automatic TTS:** Specify an `"audio_field"` in `config.json` to automatically download Japanese audio for new cards.
+4. **Automatic TTS:** Specify `"audio_field"` and/or `"sentence_audio_field"` in `config.json`. The script will generate audio for the primary word and the **JP sentence** automatically.
+
+### 🎙️ Audio Migration
+If you want to add sentence audio to existing cards:
+1. Ensure your Anki Note Type has a dedicated field (e.g., `SentenceAudio`).
+2. Update `config.json` with `"sentence_audio_field": "SentenceAudio"`.
+3. Run `npm run sync:force`.
+4. **Important:** Edit your Anki **Card Template** to include `{{SentenceAudio}}` (or your chosen field name) to hear it on your cards.
 
 ### 💻 Windows Compatibility
 This project is fully compatible with Windows, macOS, and Linux. Always use `npm run <script>` for the best experience.

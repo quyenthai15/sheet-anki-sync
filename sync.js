@@ -40,11 +40,26 @@ async function ankiAction(action, params = {}) {
       { action, version: 6, params },
       { timeout: 60000, httpAgent: agent },
     );
-    if (res.data.error) throw new Error(res.data.error);
-    return res.data.result;
+
+    // AnkiConnect specific error handling
+    if (res.data.error) {
+      return { success: false, error: res.data.error, data: null };
+    }
+    return { success: true, data: res.data.result, error: null };
   } catch (e) {
-    if (e.code === "ECONNREFUSED") throw new Error("Anki is not running or AnkiConnect is not installed.");
-    throw e;
+    if (e.code === "ECONNREFUSED") {
+      return {
+        success: false,
+        error: "Anki is not running or AnkiConnect is not installed.",
+        data: null,
+      };
+    }
+    // For other unexpected network errors, re-throw or return generic error
+    return {
+      success: false,
+      error: e.message || "An unknown network error occurred.",
+      data: null,
+    };
   }
 }
 
@@ -52,40 +67,82 @@ async function ankiAction(action, params = {}) {
  * Validates the setup on both Anki and Google Sheets (CSV) sides.
  */
 async function validateSetup(config, csvHeaders) {
-  console.log('Validating setup...');
-  
+  console.log("Validating setup...");
+
   // 1. Validate Sheet Columns
   const missingCols = [];
   for (const sheetCol of Object.keys(config.mapping)) {
     if (!csvHeaders.includes(sheetCol)) missingCols.push(sheetCol);
   }
   if (missingCols.length > 0) {
-    throw new Error(`Sheet column(s) not found in CSV: ${missingCols.join(', ')}. Please check your mapping in config.json.`);
+    throw new Error(
+      `Sheet column(s) not found in CSV: ${missingCols.join(", ")}. Please check your mapping in config.json.`,
+    );
   }
 
-  // 2. Validate Anki Deck
-  const decks = await ankiAction('deckNames');
+  // 2. Validate/Create Anki Deck
+  const deckNamesResult = await ankiAction("deckNames");
+  if (!deckNamesResult.success) {
+    throw new Error(`Failed to get deck names: ${deckNamesResult.error}`);
+  }
+  const decks = deckNamesResult.data;
+
   if (!decks.includes(config.anki_deck)) {
-    throw new Error(`Anki deck "${config.anki_deck}" not found.`);
+    console.log(
+      `Anki deck "${config.anki_deck}" not found. Attempting to create it...`,
+    );
+    const createDeckResult = await ankiAction("createDeck", {
+      deck: config.anki_deck,
+    });
+    if (!createDeckResult.success) {
+      throw new Error(
+        `Failed to create Anki deck "${config.anki_deck}": ${createDeckResult.error}`,
+      );
+    }
+    console.log(`Anki deck "${config.anki_deck}" created.`);
   }
 
   // 3. Validate Anki Model (Note Type)
-  const models = await ankiAction('modelNames');
+  const modelNamesResult = await ankiAction("modelNames");
+  if (!modelNamesResult.success) {
+    throw new Error(`Failed to get model names: ${modelNamesResult.error}`);
+  }
+  const models = modelNamesResult.data;
+
   if (!models.includes(config.anki_model)) {
-    throw new Error(`Anki Note Type "${config.anki_model}" not found.`);
+    throw new Error(
+      `Anki Note Type "${config.anki_model}" not found.\n` +
+        `Please import the appropriate .apkg file from the 'templates/' folder, ` +
+        `or create this Note Type manually in Anki.`,
+    );
   }
 
   // 4. Validate Anki Fields
-  const modelFields = await ankiAction('modelFieldNames', { modelName: config.anki_model });
+  const modelFieldNamesResult = await ankiAction("modelFieldNames", {
+    modelName: config.anki_model,
+  });
+  if (!modelFieldNamesResult.success) {
+    throw new Error(
+      `Failed to get model field names for "${config.anki_model}": ${modelFieldNamesResult.error}`,
+    );
+  }
+  const modelFields = modelFieldNamesResult.data;
+
   const mappedAnkiFields = Object.values(config.mapping);
   if (config.audio_field) mappedAnkiFields.push(config.audio_field);
+  if (config.sentence_audio_field)
+    mappedAnkiFields.push(config.sentence_audio_field); // New field validation
 
-  const missingFields = mappedAnkiFields.filter(f => !modelFields.includes(f));
+  const missingFields = mappedAnkiFields.filter(
+    (f) => !modelFields.includes(f),
+  );
   if (missingFields.length > 0) {
-    throw new Error(`Anki field(s) not found in Note Type "${config.anki_model}": ${missingFields.join(', ')}.`);
+    throw new Error(
+      `Anki field(s) not found in Note Type "${config.anki_model}": ${missingFields.join(", ")}.`,
+    );
   }
 
-  console.log('Validation successful.');
+  console.log("Validation successful.");
 }
 
 /**
@@ -94,18 +151,34 @@ async function validateSetup(config, csvHeaders) {
  */
 async function getAnkiDataMap(deck, model, primaryAnkiField) {
   console.log(`Fetching current cards from Anki...`);
-  const noteIds = await ankiAction("findNotes", { query: `deck:"${deck}"` });
+  const findNotesResult = await ankiAction("findNotes", {
+    query: `deck:"${deck}"`,
+  });
+  if (!findNotesResult.success) {
+    throw new Error(
+      `Failed to find notes in deck "${deck}": ${findNotesResult.error}`,
+    );
+  }
+  const noteIds = findNotesResult.data;
+
   const notesMap = new Map();
-  const chunkSize = 500;
-  
+  const chunkSize = 500; // AnkiConnect recommends chunking large requests
+
   for (let i = 0; i < noteIds.length; i += chunkSize) {
     const chunk = noteIds.slice(i, i + chunkSize);
-    const notesInfo = await ankiAction("notesInfo", { notes: chunk });
+    const notesInfoResult = await ankiAction("notesInfo", { notes: chunk });
+    if (!notesInfoResult.success) {
+      throw new Error(`Failed to get info for notes: ${notesInfoResult.error}`);
+    }
+    const notesInfo = notesInfoResult.data;
+
     notesInfo.forEach((info) => {
       if (info.modelName === model && info.fields[primaryAnkiField]) {
         const primaryValue = info.fields[primaryAnkiField].value.trim();
         const fields = {};
-        Object.keys(info.fields).forEach(f => fields[f] = info.fields[f].value.trim());
+        Object.keys(info.fields).forEach(
+          (f) => (fields[f] = info.fields[f].value.trim()),
+        );
         notesMap.set(primaryValue, { noteId: info.noteId, fields });
       }
     });
@@ -162,15 +235,39 @@ async function sync() {
     // Audio Logic: Only generate if field is empty or it's a new card
     const existingNote = ankiDataMap.get(word);
     const hasExistingAudio = existingNote && existingNote.fields[config.audio_field] && existingNote.fields[config.audio_field].includes('[sound:');
-    
+    const hasExistingSentenceAudio =
+      existingNote &&
+      config.sentence_audio_field &&
+      existingNote.fields[config.sentence_audio_field] &&
+      existingNote.fields[config.sentence_audio_field].includes("[sound:");
+
     const audio = [];
-    if (config.audio_field && (!existingNote || !hasExistingAudio)) {
-      // Use a cleaner filename that supports Japanese characters (Anki handles UTF-8 filenames well)
-      const safeFilename = `ja_tts_${word.replace(/[\/\\?%*:|"<>]/g, '_')}.mp3`;
+    // Primary word audio
+    if (
+      config.audio_field &&
+      (!existingNote || !hasExistingAudio) &&
+      fields[firstAnkiField]
+    ) {
+      const safeFilename = `ja_tts_${fields[firstAnkiField].replace(/[\/\\?%*:|"<>]/g, "_")}.mp3`;
       audio.push({
-        url: getTtsUrl(word),
+        url: getTtsUrl(fields[firstAnkiField]),
         filename: safeFilename,
-        fields: [config.audio_field]
+        fields: [config.audio_field],
+      });
+    }
+
+    // Sentence audio
+    const japaneseSentence = fields[config.mapping["JP sentence"]];
+    if (
+      config.sentence_audio_field &&
+      japaneseSentence &&
+      (!existingNote || !hasExistingSentenceAudio)
+    ) {
+      const safeFilename = `ja_sentence_tts_${japaneseSentence.substring(0, 50).replace(/[\/\\?%*:|"<>]/g, "_")}.mp3`;
+      audio.push({
+        url: getTtsUrl(japaneseSentence),
+        filename: safeFilename,
+        fields: [config.sentence_audio_field],
       });
     }
 
@@ -187,12 +284,16 @@ async function sync() {
 
         // Also check if we need to add missing audio
         const needsAudio = config.audio_field && !hasExistingAudio;
+        const needsSentenceAudio =
+          config.sentence_audio_field &&
+          !hasExistingSentenceAudio &&
+          japaneseSentence;
 
-        if (hasChanged || needsAudio) {
+        if (hasChanged || needsAudio || needsSentenceAudio) {
           notesToUpdate.push({
             id: existingNote.noteId,
             fields: fields,
-            audio: audio.length > 0 ? audio : undefined
+            audio: audio.length > 0 ? audio : undefined,
           });
         }
       }
@@ -214,30 +315,83 @@ async function sync() {
     console.log(`\nDRY RUN SUMMARY:`);
     console.log(`- New cards to add: ${notesToAdd.length}`);
     console.log(`- Cards with changes to update: ${notesToUpdate.length}`);
-    console.log('No changes were made to Anki.');
+
+    if (notesToAdd.length > 0) {
+      console.log("\nValidating additions...");
+      const canAddResult = await ankiAction("canAddNotesWithErrorDetail", {
+        notes: notesToAdd,
+      });
+      if (canAddResult.success) {
+        canAddResult.data.forEach((res, index) => {
+          if (!res.canAdd) {
+            const identifyingField = Object.values(notesToAdd[index].fields)[0];
+            console.warn(`[!] Cannot add "${identifyingField}": ${res.error}`);
+          }
+        });
+      }
+    }
+
+    console.log("\nNo changes were made to Anki.");
     return;
   }
 
   // 6. Execute Updates
   if (notesToUpdate.length > 0) {
     console.log(`Updating ${notesToUpdate.length} cards...`);
-    const actions = notesToUpdate.map(note => ({
-      action: "updateNoteFields",
-      params: { note }
-    }));
-    
-    for (let i = 0; i < actions.length; i += 100) {
-      await ankiAction("multi", { actions: actions.slice(i, i + 100) });
+    // updateNotes is more efficient for bulk updates
+    const updateNotesResult = await ankiAction("updateNotes", {
+      notes: notesToUpdate,
+    });
+
+    if (!updateNotesResult.success) {
+      console.error(
+        `Failed to execute bulk updates: ${updateNotesResult.error}`,
+      );
+    } else {
+      console.log(`Update complete.`);
     }
-    console.log(`Update complete.`);
   }
 
   // 7. Execute Additions
   if (notesToAdd.length > 0) {
     console.log(`Adding ${notesToAdd.length} new notes...`);
-    const results = await ankiAction("addNotes", { notes: notesToAdd });
-    const successCount = results.filter((id) => id !== null).length;
-    console.log(`Added ${successCount} notes.`);
+
+    // Pre-validate to get detailed error reasons if addNotes fails
+    const canAddResult = await ankiAction("canAddNotesWithErrorDetail", {
+      notes: notesToAdd,
+    });
+    const errorMap = new Map();
+    if (canAddResult.success) {
+      canAddResult.data.forEach((res, index) => {
+        if (!res.canAdd) errorMap.set(index, res.error);
+      });
+    }
+
+    const addNotesResult = await ankiAction("addNotes", { notes: notesToAdd });
+
+    if (!addNotesResult.success) {
+      console.error(`Bulk addNotes operation failed: ${addNotesResult.error}`);
+    }
+
+    const results = addNotesResult.data;
+    if (Array.isArray(results)) {
+      let successfulAdds = 0;
+      let failedAdds = 0;
+      results.forEach((result, index) => {
+        const note = notesToAdd[index];
+        const identifyingField = Object.values(note.fields)[0];
+        if (result !== null) {
+          successfulAdds++;
+        } else {
+          failedAdds++;
+          const reason = errorMap.get(index) || "Unknown reason (likely duplicate or missing field)";
+          console.error(`- Failed to add note for "${identifyingField}": ${reason}`);
+        }
+      });
+      console.log(
+        `Added ${successfulAdds} notes. Failed to add ${failedAdds} notes.`,
+      );
+    }
   }
 
   if (notesToAdd.length === 0 && notesToUpdate.length === 0) {

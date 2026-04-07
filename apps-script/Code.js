@@ -6,7 +6,8 @@
  */
 const GEMINI_API_KEY =
   PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
-const MODEL_NAME = "gemini-2.5-flash-lite";
+// const MODEL_NAME = "gemini-2.5-flash-lite";
+const MODEL_NAME = "gemini-3.1-flash-lite-preview";
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();

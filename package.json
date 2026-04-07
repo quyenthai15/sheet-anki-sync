@@ -12,7 +12,7 @@
     "pull": "clasp pull",
     "push": "clasp push",
     "list-addons": "node list-addons.js",
-    "setup": "./setup.sh",
+    "setup": "node setup.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

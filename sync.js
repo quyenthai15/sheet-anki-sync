@@ -15,7 +15,8 @@ const agent = new http.Agent({ keepAlive: false });
  */
 function loadConfig() {
   if (!fs.existsSync(CONFIG_PATH)) {
-    console.error('config.json not found!');
+    console.error('❌ config.json not found!\n');
+    console.error('Please run "npm run setup" to create your configuration file from the template.');
     process.exit(1);
   }
   const config = JSON.parse(fs.readFileSync(CONFIG_PATH));

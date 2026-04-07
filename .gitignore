@@ -5,3 +5,4 @@ credentials.json
 .clasprc.json
 .DS_Store
 .env
+config.json

@@ -5,6 +5,7 @@ const axios = require('axios');
 const { parse } = require('csv-parse/sync');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
+const EXAMPLE_CONFIG_PATH = path.join(__dirname, 'config.example.json');
 const ANKI_URL = "http://127.0.0.1:8765";
 
 const rl = readline.createInterface({
@@ -31,13 +32,17 @@ async function main() {
   if (fs.existsSync(CONFIG_PATH)) {
     config = JSON.parse(fs.readFileSync(CONFIG_PATH));
     console.log("Existing configuration found.");
+  } else if (fs.existsSync(EXAMPLE_CONFIG_PATH)) {
+    config = JSON.parse(fs.readFileSync(EXAMPLE_CONFIG_PATH));
+    console.log("Starting with default template configuration.");
   }
 
   // 1. Google Sheet CSV URL
-  const csvUrl = await question(`Enter your Published Google Sheet CSV URL [${config.sheet_csv_url || ''}]: `);
+  const defaultUrl = config.sheet_csv_url === "YOUR_PUBLISHED_CSV_URL_HERE" ? "" : config.sheet_csv_url;
+  const csvUrl = await question(`Enter your Published Google Sheet CSV URL [${defaultUrl || ''}]: `);
   if (csvUrl) config.sheet_csv_url = csvUrl;
 
-  if (!config.sheet_csv_url) {
+  if (!config.sheet_csv_url || config.sheet_csv_url === "YOUR_PUBLISHED_CSV_URL_HERE") {
     console.error("CSV URL is required.");
     process.exit(1);
   }

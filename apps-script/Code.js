@@ -115,36 +115,37 @@ function fillVocabData() {
  */
 function processBatch(sheet, chunk, knownVocab) {
   const prompt = `
-Act as a Senior Japanese Language Instructor (JLPT Specialist). 
-Generate linguistic data for the following list of Japanese words:
-${JSON.stringify(chunk.map((c) => ({ word: c.expression, context: c.meaning })))}
+Act as a Senior Japanese Language Instructor specializing in absolute beginners (JLPT N5). 
+Generate linguistic data for these words: ${JSON.stringify(chunk.map((c) => ({ word: c.expression, context: c.meaning })))}
 
-INSTRUCTIONS:
-1. Provide Kanji, Reading (Kana), and Word Type.
-2. Create one natural example sentence per word. 
-3. Use correct particles (wa, ga, wo, ni, e, etc.) and maintain a polite (Desu/Masu) style suitable for N5/N4 learners, ensure grammatical tenses are correct.
-4. Use words from this known list where possible for the sentences: [${knownVocab}].
-5. Provide Vietnamese translation for the sentence.
+STRICT INSTRUCTIONS:
+1. GRAMMAR: Use SIMPLE grammar suitable for N5 beginners. Avoid complex particles or nested clauses.
+2. VOCABULARY: For example sentences, strictly prioritize using words from this known list: [${knownVocab}]. Avoid introducing new or advanced words unless absolutely necessary for the sentence to make sense.
+3. UNKNOWN DATA: If Kanji or Word Type cannot be confidently determined, return null or an empty string. NEVER hallucinate information.
+4. TENSE: Ensure the grammatical tense matches the context, but keep it simple (Past/Present/Future).
+5. FORMAT: Provide Kanji, Reading (Kana), Word Type (e.g. Noun, Verb-u), a simple sentence, and its Vietnamese translation. Note only the sentence translation should be in Vietnamese.
 
-Return ONLY a JSON array of objects. Each object must strictly follow this key mapping:
+Return ONLY a JSON array of objects following this exact schema:
 [
   {
-    "input_word": "original word from input",
-    "kanji": "Kanji version",
+    "input_word": "original word",
+    "kanji": "Kanji or null",
     "reading": "Kana reading",
-    "type": "Word type",
-    "sentence_jp": "Natural JP sentence",
+    "type": "Word type or null",
+    "sentence_jp": "Simple N5 sentence",
     "sentence_vn": "Vietnamese translation",
-    "level": "N5 or N4",
-  },
-  ...
+    "level": "N5"
+  }
 ]
 `;
 
   try {
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" },
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      },
     };
     const options = {
       method: "post",

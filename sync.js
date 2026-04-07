@@ -153,6 +153,12 @@ async function sync() {
     const word = (row[firstSheetCol] || "").trim();
     if (!word) continue;
 
+    // Map CSV row to Anki fields based on config
+    const fields = {};
+    for (const [sheetCol, ankiField] of Object.entries(config.mapping)) {
+      fields[ankiField] = (row[sheetCol] || "").trim();
+    }
+
     // Audio Logic: Only generate if field is empty or it's a new card
     const existingNote = ankiDataMap.get(word);
     const hasExistingAudio = existingNote && existingNote.fields[config.audio_field] && existingNote.fields[config.audio_field].includes('[sound:');

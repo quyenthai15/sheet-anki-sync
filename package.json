@@ -7,6 +7,8 @@
     "sync:dry": "node sync.js --dry-run",
     "sync:force": "node sync.js --force",
     "sync:force-dry": "node sync.js --force --dry-run",
+    "export-templates": "node export-templates.js",
+    "backup:all": "node backup-all.js",
     "pull": "clasp pull",
     "push": "clasp push",
     "list-addons": "node list-addons.js",

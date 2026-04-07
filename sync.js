@@ -339,14 +339,16 @@ async function sync() {
   // 6. Execute Updates
   if (notesToUpdate.length > 0) {
     console.log(`Updating ${notesToUpdate.length} cards...`);
-    // updateNotes is more efficient for bulk updates
-    const updateNotesResult = await ankiAction("updateNotes", {
-      notes: notesToUpdate,
-    });
+    const actions = notesToUpdate.map((note) => ({
+      action: "updateNoteFields",
+      params: { note },
+    }));
 
-    if (!updateNotesResult.success) {
+    // Multi is more broadly supported than updateNotes
+    const multiUpdateResult = await ankiAction("multi", { actions: actions });
+    if (!multiUpdateResult.success) {
       console.error(
-        `Failed to execute bulk updates: ${updateNotesResult.error}`,
+        `Failed to execute bulk updates: ${multiUpdateResult.error}`,
       );
     } else {
       console.log(`Update complete.`);
@@ -357,12 +359,12 @@ async function sync() {
   if (notesToAdd.length > 0) {
     console.log(`Adding ${notesToAdd.length} new notes...`);
 
-    // Pre-validate to get detailed error reasons if addNotes fails
+    // canAddNotesWithErrorDetail might not be supported in older AnkiConnect versions
     const canAddResult = await ankiAction("canAddNotesWithErrorDetail", {
       notes: notesToAdd,
     });
     const errorMap = new Map();
-    if (canAddResult.success) {
+    if (canAddResult.success && Array.isArray(canAddResult.data)) {
       canAddResult.data.forEach((res, index) => {
         if (!res.canAdd) errorMap.set(index, res.error);
       });
@@ -372,6 +374,7 @@ async function sync() {
 
     if (!addNotesResult.success) {
       console.error(`Bulk addNotes operation failed: ${addNotesResult.error}`);
+      return; // Exit if the entire operation failed (e.g. Anki closed)
     }
 
     const results = addNotesResult.data;
@@ -381,12 +384,17 @@ async function sync() {
       results.forEach((result, index) => {
         const note = notesToAdd[index];
         const identifyingField = Object.values(note.fields)[0];
+        // result is the note ID (number) or null if it failed
         if (result !== null) {
           successfulAdds++;
         } else {
           failedAdds++;
-          const reason = errorMap.get(index) || "Unknown reason (likely duplicate or missing field)";
-          console.error(`- Failed to add note for "${identifyingField}": ${reason}`);
+          const reason =
+            errorMap.get(index) ||
+            "Unknown reason (likely duplicate or missing field)";
+          console.error(
+            `- Failed to add note for "${identifyingField}": ${reason}`,
+          );
         }
       });
       console.log(

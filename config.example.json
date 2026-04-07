@@ -2,6 +2,7 @@
   "sheet_csv_url": "YOUR_PUBLISHED_CSV_URL_HERE",
   "audio_field": "Audio",
   "sentence_audio_field": "SentenceAudio",
+  "sentence_source_col": "JP sentence",
   "anki_deck": "Japanese::N5",
   "anki_model": "JP_sheet",
   "mapping": {

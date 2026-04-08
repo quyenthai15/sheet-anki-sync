@@ -17,6 +17,7 @@ This document takes absolute precedence over general workflows. All future modif
 
 ## ⚡ Performance Standards
 - **Bulk Operations:** Always use `addNotes` (plural) and `multi` actions. Never send individual `addNote` requests in a loop for large datasets.
+- **Update Logic:** The `updateNotes` action is NOT supported in standard AnkiConnect versions. Use the `multi` action with `updateNoteFields` for batch updates.
 - **Chunking:** When querying large decks (e.g., `notesInfo`), process in chunks of 500 to avoid memory or connection timeouts.
 
 ## 📂 Portability & Security

@@ -123,14 +123,20 @@ STRICT INSTRUCTIONS:
 2. VOCABULARY: For example sentences, strictly prioritize using words from this known list: [${knownVocab}]. Avoid introducing new or advanced words unless absolutely necessary for the sentence to make sense.
 3. UNKNOWN DATA: If Kanji or Word Type cannot be confidently determined, return null or an empty string. NEVER hallucinate information.
 4. TENSE: Ensure the grammatical tense matches the context, but keep it simple (Past/Present/Future).
-5. FORMAT: Provide Kanji, Reading (Kana), Word Type (e.g. Noun, Verb-u), a simple sentence, and its Vietnamese translation. Note only the sentence translation should be in Vietnamese.
+5. FORMAT: Provide Kanji (leave null if not available), Reading (Kana), Word Type (e.g. Noun, Verb-u), a simple sentence, and its Vietnamese translation. Note only the sentence translation should be in Vietnamese.
+6. PITCH ACCENT: Use standard Tokyo dialect. Provide the Pitch Accent Type as a number in brackets [0, 1, 2, 3, etc.] appended to the "reading" field.
+   - [0] = Heiban (Flat): だいがく [0]
+   - [1] = Atamadaka (Head-high): あめ [1]
+   - [2], [3]... = Nakadaka/Odaka (Middle/Tail-high): たまご [2], はし [2]
+   - UNKNOWN: If the pitch accent is unknown or uncertain, provide the reading with NO brackets.
+   Include this number directly in the "reading" field.
 
 Return ONLY a JSON array of objects following this exact schema:
 [
   {
     "input_word": "original word",
     "kanji": "Kanji or null",
-    "reading": "Kana reading",
+    "reading": "Kana reading with pitch type, e.g. あめ [1], だいがく [0]",
     "type": "Word type or null",
     "sentence_jp": "Simple N5 sentence",
     "sentence_vn": "Vietnamese translation",

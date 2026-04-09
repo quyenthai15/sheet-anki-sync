@@ -65,5 +65,19 @@ If you want to add sentence audio to existing cards:
 3. Run `npm run sync:force`.
 4. **Important:** Edit your Anki **Card Template** to include `{{SentenceAudio}}` (or your chosen field name) to hear it on your cards.
 
+## 📖 Japanese Learning Features
+
+### 🎙️ Pitch Accent Guide (Tokyo Dialect)
+The system uses the **Numerical Method** for maximum accuracy. When generating data in Google Sheets, the pitch type is appended to the reading:
+
+| Type | Name | Pattern | Visualized | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| **[0]** | **Heiban** | Low-High... (stays high) | だ**いがく** | 大学 [0] |
+| **[1]** | **Atamadaka** | **High**-Low... | **あ**め | 雨 [1] |
+| **[2]** | **Nakadaka** | Low-**High**-Low | た**ま**ご | 卵 [2] |
+| **[2]** | **Odaka** | Low-**High** (drops on particle) | は**し** [が] | 橋 [2] |
+
+**Note:** The CLI sync tool automatically strips these markers (`[0]`, `[1]`, etc.) before generating TTS audio to ensure clear pronunciation.
+
 ### 💻 Windows Compatibility
 This project is fully compatible with Windows, macOS, and Linux. Always use `npm run <script>` for the best experience.

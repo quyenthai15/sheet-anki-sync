@@ -246,7 +246,7 @@ function moveToMaster() {
   for (let i = 1; i < sourceData.length; i++) {
     let word = sourceData[i][0].toString().trim();
     if (word && !existingWords.has(word.toLowerCase())) {
-      newRows.push(sourceData[i]);
+      newRows.push([word]);
     }
   }
 
@@ -256,7 +256,7 @@ function moveToMaster() {
         masterSheet.getLastRow() + 1,
         1,
         newRows.length,
-        newRows[0].length,
+        1,
       )
       .setValues(newRows);
     SpreadsheetApp.getUi().alert(

@@ -52,33 +52,43 @@ function fillVocabData() {
   if (!validateSetup()) return;
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const range = sheet.getActiveRange();
-  const startRow = range.getRow();
-  const numRows = range.getNumRows();
+  const rangeList = sheet.getActiveRangeList();
+  if (!rangeList) return;
+  const ranges = rangeList.getRanges();
 
   // 1. Collect valid words into a list
   const wordsToProcess = [];
-  for (let i = 0; i < numRows; i++) {
-    const currentRow = startRow + i;
-    const expression = sheet
-      .getRange(currentRow, CONFIG.SOURCE_EXPRESSION_COL)
-      .getValue();
-    const meaning = sheet
-      .getRange(currentRow, CONFIG.SOURCE_MEANING_COL)
-      .getValue();
+  const processedRows = new Set();
 
-    if (
-      !expression ||
-      expression.toString().toLowerCase().includes("expression")
-    )
-      continue;
+  ranges.forEach((range) => {
+    const startRow = range.getRow();
+    const numRows = range.getNumRows();
 
-    wordsToProcess.push({
-      expression: expression.toString().trim(),
-      meaning: meaning.toString().trim(),
-      row: currentRow,
-    });
-  }
+    for (let i = 0; i < numRows; i++) {
+      const currentRow = startRow + i;
+      if (processedRows.has(currentRow)) continue;
+      processedRows.add(currentRow);
+
+      const expression = sheet
+        .getRange(currentRow, CONFIG.SOURCE_EXPRESSION_COL)
+        .getValue();
+      const meaning = sheet
+        .getRange(currentRow, CONFIG.SOURCE_MEANING_COL)
+        .getValue();
+
+      if (
+        !expression ||
+        expression.toString().toLowerCase().includes("expression")
+      )
+        continue;
+
+      wordsToProcess.push({
+        expression: expression.toString().trim(),
+        meaning: meaning.toString().trim(),
+        row: currentRow,
+      });
+    }
+  });
 
   if (wordsToProcess.length === 0) {
     SpreadsheetApp.getUi().alert("No valid words selected.");

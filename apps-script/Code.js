@@ -27,9 +27,19 @@ const MODEL_NAME = "gemini-3.1-flash-lite-preview";
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu("J-Study Tools")
+    .addItem("Add New Row at Top", "addRowTop")
+    .addSeparator()
     .addItem("Generate Data for Selected Rows", "fillVocabData")
     .addItem("Move New Words to Master", "moveToMaster")
     .addToUi();
+}
+
+/**
+ * Inserts a new row at row 1 (just below the headers).
+ */
+function addRowTop() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  sheet.insertRowBefore(1);
 }
 
 /**

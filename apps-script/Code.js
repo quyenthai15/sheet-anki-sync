@@ -22,14 +22,14 @@ const CONFIG = {
 const GEMINI_API_KEY =
   PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
 // const MODEL_NAME = "gemini-2.5-flash-lite";
-const MODEL_NAME = "gemini-3.1-flash-lite-preview";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu("J-Study Tools")
-    .addItem("Add New Row at Top", "addRowTop")
-    .addSeparator()
     .addItem("Generate Data for Selected Rows", "fillVocabData")
+    .addSeparator()
+    .addItem("Add New Row at Top", "addRowTop")
     .addItem("Move New Words to Master", "moveToMaster")
     .addToUi();
 }
@@ -136,7 +136,7 @@ function fillVocabData() {
 function processBatch(sheet, chunk, knownVocab) {
   const prompt = `
 Act as a Senior Japanese Language Instructor specializing in absolute beginners (JLPT N5). 
-Generate linguistic data for these words: ${JSON.stringify(chunk.map((c) => ({ word: c.expression, context: c.meaning })))}
+Generate linguistic data for these words: ${JSON.stringify(chunk.map((c, index) => ({ id: index, word: c.expression, context: c.meaning })))}
 
 STRICT INSTRUCTIONS:
 1. GRAMMAR: Use SIMPLE grammar suitable for N5 beginners. Avoid complex particles or nested clauses.
@@ -144,7 +144,8 @@ STRICT INSTRUCTIONS:
 3. UNKNOWN DATA: If Kanji or Word Type cannot be confidently determined, return null or an empty string. NEVER hallucinate information.
 4. TENSE: Ensure the grammatical tense matches the context, but keep it simple (Past/Present/Future).
 5. FORMAT: Provide Kanji (leave null if not available), Reading (Kana), Word Type (e.g. Noun, Verb-u), a simple sentence, and its Vietnamese translation. Note only the sentence translation should be in Vietnamese.
-6. PITCH ACCENT: Use standard Tokyo dialect. Provide the Pitch Accent Type as a number in brackets [0, 1, 2, 3, etc.] appended to the "reading" field.
+6. PITCH ACCENT: Use standard Tokyo dialect. Provide the Pitch Accent Type as a number in brackets appended to the "reading" field.
+   - The number MUST be ≥ 0 and ≤ the mora count of the reading. NEVER output a number higher than the word's mora count (e.g. a 3-mora word たまご can only be [0], [1], [2], or [3]).
    - [0] = Heiban (Flat): だいがく [0]
    - [1] = Atamadaka (Head-high): あめ [1]
    - [2], [3]... = Nakadaka/Odaka (Middle/Tail-high): たまご [2], はし [2]
@@ -154,6 +155,7 @@ STRICT INSTRUCTIONS:
 Return ONLY a JSON array of objects following this exact schema:
 [
   {
+    "id": 0,
     "input_word": "original word",
     "kanji": "Kanji or null",
     "reading": "Kana reading with pitch type, e.g. あめ [1], だいがく [0]",
@@ -206,17 +208,14 @@ Return ONLY a JSON array of objects following this exact schema:
     }
 
     results.forEach((res) => {
-      // Find the corresponding input word in our chunk to get the row
-      const originalEntry = chunk.find(
-        (c) =>
-          c.expression.toLowerCase() === res.input_word.toLowerCase() ||
-          res.input_word.toLowerCase().includes(c.expression.toLowerCase()),
-      );
+      // Use the provided ID for precise mapping, fallback to word matching if needed (though ID is preferred)
+      const originalEntry = chunk[res.id];
 
       if (originalEntry) {
         for (const [key, col] of Object.entries(CONFIG.RESULTS_MAPPING)) {
-          if (res[key])
+          if (res[key] !== undefined && res[key] !== null) {
             sheet.getRange(originalEntry.row, col).setValue(res[key]);
+          }
         }
       }
     });

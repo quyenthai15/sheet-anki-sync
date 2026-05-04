@@ -4,13 +4,13 @@
  */
 const CONFIG = {
   SOURCE_EXPRESSION_COL: 1, // Column A: The word you want to look up
-  SOURCE_MEANING_COL: 2, // Column C: Optional meaning/context
+  SOURCE_MEANING_COL: 2, // Column B: Optional meaning/context
   MASTER_SHEET_NAME: "master_list",
-  CHUNK_SIZE: 5, // Number of words to process in one API call
+  CHUNK_SIZE: 20, // Number of words to process in one API call
 
   // Mapping of result keys to column numbers (where the AI writes back)
   RESULTS_MAPPING: {
-    reading: 3, // Column B
+    reading: 3, // Column C
     kanji: 4, // Column D
     type: 5, // Column E
     sentence_jp: 6, // Column F
@@ -73,18 +73,15 @@ function fillVocabData() {
   ranges.forEach((range) => {
     const startRow = range.getRow();
     const numRows = range.getNumRows();
+    const rangeData = sheet.getRange(startRow, 1, numRows, 2).getValues(); // Read columns A and B
 
     for (let i = 0; i < numRows; i++) {
       const currentRow = startRow + i;
       if (processedRows.has(currentRow)) continue;
       processedRows.add(currentRow);
 
-      const expression = sheet
-        .getRange(currentRow, CONFIG.SOURCE_EXPRESSION_COL)
-        .getValue();
-      const meaning = sheet
-        .getRange(currentRow, CONFIG.SOURCE_MEANING_COL)
-        .getValue();
+      const expression = rangeData[i][CONFIG.SOURCE_EXPRESSION_COL - 1];
+      const meaning = rangeData[i][CONFIG.SOURCE_MEANING_COL - 1];
 
       if (
         !expression ||
@@ -207,17 +204,22 @@ Return ONLY a JSON array of objects following this exact schema:
       );
     }
 
-    results.forEach((res) => {
-      // Use the provided ID for precise mapping, fallback to word matching if needed (though ID is preferred)
-      const originalEntry = chunk[res.id];
+    const mappingEntries = Object.entries(CONFIG.RESULTS_MAPPING);
+    const minCol = Math.min(...mappingEntries.map(([, c]) => c));
+    const maxCol = Math.max(...mappingEntries.map(([, c]) => c));
+    const numCols = maxCol - minCol + 1;
 
-      if (originalEntry) {
-        for (const [key, col] of Object.entries(CONFIG.RESULTS_MAPPING)) {
-          if (res[key] !== undefined && res[key] !== null) {
-            sheet.getRange(originalEntry.row, col).setValue(res[key]);
-          }
-        }
+    results.forEach((res) => {
+      const originalEntry = chunk[res.id];
+      if (!originalEntry) return;
+
+      const rowData = Array(numCols).fill("");
+      for (const [key, col] of mappingEntries) {
+        if (res[key] != null) rowData[col - minCol] = res[key];
       }
+      sheet
+        .getRange(originalEntry.row, minCol, 1, numCols)
+        .setValues([rowData]);
     });
 
     Utilities.sleep(1000); // Prevent rate limiting between chunks

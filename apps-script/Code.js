@@ -217,12 +217,8 @@ Return ONLY a JSON array of objects following this exact schema:
       for (const [key, col] of mappingEntries) {
         if (res[key] != null) rowData[col - minCol] = res[key];
       }
-      sheet
-        .getRange(originalEntry.row, minCol, 1, numCols)
-        .setValues([rowData]);
+      sheet.getRange(originalEntry.row, minCol, 1, numCols).setValues([rowData]);
     });
-
-    Utilities.sleep(1000); // Prevent rate limiting between chunks
   } catch (e) {
     throw new Error(`Batch processing failed: ${e.message}`);
   }

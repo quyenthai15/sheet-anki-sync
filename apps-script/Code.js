@@ -209,16 +209,31 @@ Return ONLY a JSON array of objects following this exact schema:
     const maxCol = Math.max(...mappingEntries.map(([, c]) => c));
     const numCols = maxCol - minCol + 1;
 
-    results.forEach((res) => {
-      const originalEntry = chunk[res.id];
-      if (!originalEntry) return;
+    // Build sorted (row, rowData) pairs
+    const writes = results
+      .map((res) => {
+        const originalEntry = chunk[res.id];
+        if (!originalEntry) return null;
+        const rowData = Array(numCols).fill("");
+        for (const [key, col] of mappingEntries) {
+          if (res[key] != null) rowData[col - minCol] = res[key];
+        }
+        return { row: originalEntry.row, rowData };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.row - b.row);
 
-      const rowData = Array(numCols).fill("");
-      for (const [key, col] of mappingEntries) {
-        if (res[key] != null) rowData[col - minCol] = res[key];
-      }
-      sheet.getRange(originalEntry.row, minCol, 1, numCols).setValues([rowData]);
-    });
+    // Flush contiguous blocks in one setValues call each
+    let i = 0;
+    while (i < writes.length) {
+      let j = i + 1;
+      while (j < writes.length && writes[j].row === writes[j - 1].row + 1) j++;
+      const block = writes.slice(i, j);
+      sheet
+        .getRange(block[0].row, minCol, block.length, numCols)
+        .setValues(block.map((w) => w.rowData));
+      i = j;
+    }
   } catch (e) {
     throw new Error(`Batch processing failed: ${e.message}`);
   }

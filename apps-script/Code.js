@@ -21,8 +21,7 @@ const CONFIG = {
 
 const GEMINI_API_KEY =
   PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
-// const MODEL_NAME = "gemini-2.5-flash-lite";
-const MODEL_NAME = "gemini-3-flash-preview";
+const MODEL_NAME = "gemini-2.5-flash";
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
@@ -48,7 +47,7 @@ function addRowTop() {
 function validateSetup() {
   if (!GEMINI_API_KEY) {
     SpreadsheetApp.getUi().alert(
-      "MISSING API KEY:\n\n1. Go to Project Settings (gear icon).\n2. Add a Script Property named 'GEMINI_API_KEY'.\n3. Get a free key at: https://aistudio.google.com/app/apikey"
+      "MISSING API KEY:\n\n1. Go to Project Settings (gear icon).\n2. Add a Script Property named 'GEMINI_API_KEY'.\n3. Get a free key at: https://aistudio.google.com/app/apikey",
     );
     return false;
   }
@@ -61,70 +60,68 @@ function validateSetup() {
 function fillVocabData() {
   if (!validateSetup()) return;
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
   const rangeList = sheet.getActiveRangeList();
   if (!rangeList) return;
   const ranges = rangeList.getRanges();
 
-  // 1. Collect valid words into a list
+  // 1. Read all selected rows in one Sheets call via bounding range
+  const minRow = Math.min(...ranges.map((r) => r.getRow()));
+  const maxRow = Math.max(
+    ...ranges.map((r) => r.getRow() + r.getNumRows() - 1),
+  );
+  const boundingData = sheet
+    .getRange(minRow, 1, maxRow - minRow + 1, 2)
+    .getValues();
+
+  const selectedRows = new Set(
+    ranges.flatMap((r) =>
+      Array.from({ length: r.getNumRows() }, (_, i) => r.getRow() + i),
+    ),
+  );
+
   const wordsToProcess = [];
-  const processedRows = new Set();
-
-  ranges.forEach((range) => {
-    const startRow = range.getRow();
-    const numRows = range.getNumRows();
-    const rangeData = sheet.getRange(startRow, 1, numRows, 2).getValues(); // Read columns A and B
-
-    for (let i = 0; i < numRows; i++) {
-      const currentRow = startRow + i;
-      if (processedRows.has(currentRow)) continue;
-      processedRows.add(currentRow);
-
-      const expression = rangeData[i][CONFIG.SOURCE_EXPRESSION_COL - 1];
-      const meaning = rangeData[i][CONFIG.SOURCE_MEANING_COL - 1];
-
-      if (
-        !expression ||
-        expression.toString().toLowerCase().includes("expression")
-      )
-        continue;
-
-      wordsToProcess.push({
-        expression: expression.toString().trim(),
-        meaning: meaning.toString().trim(),
-        row: currentRow,
-      });
-    }
-  });
+  for (let row = minRow; row <= maxRow; row++) {
+    if (!selectedRows.has(row)) continue;
+    const [expression, meaning] = boundingData[row - minRow];
+    if (
+      !expression ||
+      expression.toString().toLowerCase().includes("expression")
+    )
+      continue;
+    wordsToProcess.push({
+      expression: expression.toString().trim(),
+      meaning: meaning.toString().trim(),
+      row,
+    });
+  }
 
   if (wordsToProcess.length === 0) {
-    SpreadsheetApp.getUi().alert("No valid words selected.");
+    ss.toast("No valid words selected.");
     return;
   }
 
-  // 2. Get known vocab for context
-  const masterSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    CONFIG.MASTER_SHEET_NAME,
-  );
+  // 2. Get known vocab for context — read only populated rows
+  const masterSheet = ss.getSheetByName(CONFIG.MASTER_SHEET_NAME);
   const knownVocab = masterSheet
-    ? masterSheet.getRange("A:A").getValues().flat().filter(String).join(", ")
+    ? masterSheet
+        .getRange(1, 1, masterSheet.getLastRow(), 1)
+        .getValues()
+        .flat()
+        .filter(String)
+        .join(", ")
     : "";
 
   // 3. Process in chunks
   for (let i = 0; i < wordsToProcess.length; i += CONFIG.CHUNK_SIZE) {
     const chunk = wordsToProcess.slice(i, i + CONFIG.CHUNK_SIZE);
     processBatch(sheet, chunk, knownVocab);
-
-    // Status update (optional)
     const progress = Math.min(i + CONFIG.CHUNK_SIZE, wordsToProcess.length);
-    SpreadsheetApp.getActiveSpreadsheet().toast(
-      `Processed ${progress} of ${wordsToProcess.length} words...`,
-    );
+    ss.toast(`Processed ${progress} of ${wordsToProcess.length} words...`);
   }
 
-  SpreadsheetApp.getUi().alert(
-    `Successfully processed ${wordsToProcess.length} words.`,
-  );
+  ss.toast(`Done — ${wordsToProcess.length} words processed.`, "✓", 5);
 }
 
 /**
@@ -132,7 +129,7 @@ function fillVocabData() {
  */
 function processBatch(sheet, chunk, knownVocab) {
   const prompt = `
-Act as a Senior Japanese Language Instructor specializing in absolute beginners (JLPT N5). 
+Act as a Senior Japanese Language Instructor specializing in beginners (JLPT N5).
 Generate linguistic data for these words: ${JSON.stringify(chunk.map((c, index) => ({ id: index, word: c.expression, context: c.meaning })))}
 
 STRICT INSTRUCTIONS:
@@ -196,8 +193,6 @@ Return ONLY a JSON array of objects following this exact schema:
     const results = JSON.parse(
       jsonResponse.candidates[0].content.parts[0].text,
     );
-
-    // Results is expected to be an array. Map back to rows.
     if (!Array.isArray(results)) {
       throw new Error(
         "AI did not return an array. Response: " + JSON.stringify(results),
@@ -251,50 +246,37 @@ function moveToMaster() {
   // Auto-create master sheet if missing
   if (!masterSheet) {
     masterSheet = ss.insertSheet(CONFIG.MASTER_SHEET_NAME);
-    // Copy headers from source sheet to master
     const headers = sourceSheet
       .getRange(1, 1, 1, sourceSheet.getLastColumn())
       .getValues();
     masterSheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
-    SpreadsheetApp.getActiveSpreadsheet().toast(
-      `Created missing '${CONFIG.MASTER_SHEET_NAME}' sheet.`,
-    );
+    ss.toast(`Created missing '${CONFIG.MASTER_SHEET_NAME}' sheet.`);
   }
 
   if (sourceSheet.getName() === CONFIG.MASTER_SHEET_NAME) {
-    SpreadsheetApp.getUi().alert("You are already on the Master List sheet.");
+    ss.toast("You are already on the Master List sheet.");
     return;
   }
 
   const sourceData = sourceSheet.getDataRange().getValues();
   const masterData = masterSheet.getDataRange().getValues();
 
-  // Use Column A (Index 0) as the unique ID for words
   const existingWords = new Set(
     masterData.map((row) => row[0].toString().trim().toLowerCase()),
   );
 
   const newRows = [];
   for (let i = 1; i < sourceData.length; i++) {
-    let word = sourceData[i][0].toString().trim();
-    if (word && !existingWords.has(word.toLowerCase())) {
-      newRows.push([word]);
-    }
+    const word = sourceData[i][0].toString().trim();
+    if (word && !existingWords.has(word.toLowerCase())) newRows.push([word]);
   }
 
   if (newRows.length > 0) {
     masterSheet
-      .getRange(
-        masterSheet.getLastRow() + 1,
-        1,
-        newRows.length,
-        1,
-      )
+      .getRange(masterSheet.getLastRow() + 1, 1, newRows.length, 1)
       .setValues(newRows);
-    SpreadsheetApp.getUi().alert(
-      `Added ${newRows.length} new words to Master List.`,
-    );
+    ss.toast(`Added ${newRows.length} new words to Master List.`, "✓", 5);
   } else {
-    SpreadsheetApp.getUi().alert("No new words found to add.");
+    ss.toast("No new words found to add.");
   }
 }
